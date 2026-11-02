@@ -2,7 +2,7 @@ import "dotenv/config"
 
 import { startTelemetry } from "./integrations/opentelemetry/start-telemetry/index.ts"
 import { logger } from "./integrations/pino/index.ts"
-import { createGitHubAuthenticationRuntime } from "./domains/admission/create-github-authentication-runtime/index.ts"
+import { createAuthenticationRouteDependencies } from "./create-authentication-route-dependencies/index.ts"
 import { runApi } from "./run-api/index.ts"
 
 const port = Number(process.env.PORT ?? 3001)
@@ -18,7 +18,7 @@ try {
       throw new Error("HUB_TRUSTED_PROXY_HOPS must be an integer between 0 and 10.")
     }
     const authentication = process.env.HUB_APPLICATION_ORIGIN
-      ? createGitHubAuthenticationRuntime(process.env)
+      ? createAuthenticationRouteDependencies(process.env)
       : undefined
     await runApi({ port, logger, authentication, trustedProxyHops })
   } finally {
