@@ -1,0 +1,31 @@
+import type { RequestHandler } from "express"
+import { z } from "zod"
+
+import type { StartAdministratorEnrollmentDependencies } from "../types.ts"
+import { start } from "../start/index.ts"
+
+const bodySchema = z
+  .object({
+    bootstrap_secret: z.string().min(1).max(2_000),
+  })
+  .strict()
+
+export function adminEnrollmentStart(
+  dependencies: StartAdministratorEnrollmentDependencies,
+): RequestHandler {
+  const startEnrollment = start(dependencies)
+  return async (request, response, next) => {
+    const body = bodySchema.safeParse(request.body)
+    if (!body.success || !dependencies.verifyBootstrapSecret(body.data.bootstrap_secret)) {
+      try {
+        await dependencies.writeBootstrapDenial("invalid_secret")
+      } catch (error) {
+        next(error)
+        return
+      }
+      response.status(403).json({ error: "Administrator enrollment was denied." })
+      return
+    }
+    startEnrollment(request, response, next)
+  }
+}

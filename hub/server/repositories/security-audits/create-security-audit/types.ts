@@ -20,6 +20,72 @@ export interface AuthenticationAttemptDeniedAudit extends SecurityAuditEvent {
     | "verification_state_invalid"
 }
 
+export interface BootstrapAttemptDeniedAudit extends SecurityAuditEvent {
+  type: "bootstrap_attempt_denied"
+  reason: "invalid_secret" | "rate_limited"
+}
+
+export interface MembershipAssignmentCreatedAudit extends SecurityAuditEvent {
+  type: "membership_assignment_created"
+  membershipId: string
+  source: "bootstrap"
+  role: "administrator"
+}
+
+export interface MembershipCreatedAudit extends SecurityAuditEvent {
+  type: "membership_created"
+  membershipId: string
+}
+
+export interface MembershipRestoredAudit extends SecurityAuditEvent {
+  type: "membership_restored"
+  membershipId: string
+}
+
+export interface MembershipAssignmentRestoredAudit extends SecurityAuditEvent {
+  type: "membership_assignment_restored"
+  membershipId: string
+  source: "bootstrap"
+  role: "administrator"
+}
+
+export interface MembershipAssignmentRevokedAudit extends SecurityAuditEvent {
+  type: "membership_assignment_revoked"
+  membershipId: string
+  source: "bootstrap"
+  role: "administrator"
+}
+
+export interface SessionCreatedAudit extends SecurityAuditEvent {
+  type: "session_created"
+  sessionId: string
+  membershipId: string
+}
+
+export interface SessionEndedAudit extends SecurityAuditEvent {
+  type: "session_ended"
+  sessionId: string
+  membershipId: string
+}
+
+export interface AdmissionDeniedAudit extends SecurityAuditEvent {
+  type: "admission_denied"
+  externalIdentityId: string
+  reason:
+    | "attempt_mismatch"
+    | "configuration_changed"
+    | "identity_mismatch"
+    | "membership_inactive"
+    | "membership_missing"
+    | "provider_revoked"
+}
+
+export interface AdmissionFailedAudit extends SecurityAuditEvent {
+  type: "admission_failed"
+  externalIdentityId: string
+  reason: "retry_exhausted" | "transaction_error"
+}
+
 export interface ExternalIdentityCreatedAudit extends SecurityAuditEvent {
   type: "external_identity_created"
   externalIdentityId: string
@@ -63,6 +129,16 @@ export interface ProviderRevisionPersistFailedAudit extends SecurityAuditEvent {
 
 export type CreateSecurityAuditEvent =
   | AuthenticationAttemptDeniedAudit
+  | BootstrapAttemptDeniedAudit
+  | MembershipAssignmentCreatedAudit
+  | MembershipAssignmentRestoredAudit
+  | MembershipAssignmentRevokedAudit
+  | MembershipCreatedAudit
+  | MembershipRestoredAudit
+  | SessionCreatedAudit
+  | SessionEndedAudit
+  | AdmissionDeniedAudit
+  | AdmissionFailedAudit
   | ExternalIdentityCreatedAudit
   | ExternalIdentityCreateFailedAudit
   | ProviderRevisionValidationFailedAudit
