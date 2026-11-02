@@ -33,6 +33,7 @@ describe("authentication proof database boundaries", () => {
       browserBindingDigest: "b".repeat(64),
       codeVerifierCiphertext: "encrypted-verifier",
       lifetimeSeconds: 600,
+      purpose: "SIGN_IN" as const,
     }
     const { expiresAt } = await createAuthorizationAttempt(prisma, input)
     expect(expiresAt.getTime()).toBeGreaterThan(Date.now())
@@ -87,6 +88,7 @@ describe("authentication proof database boundaries", () => {
           "provider_revision_id",
           "state_digest",
           "browser_binding_digest",
+          "purpose",
           "code_verifier_ciphertext",
           "expires_at",
           "created_at",
@@ -96,6 +98,7 @@ describe("authentication proof database boundaries", () => {
           ${providerRevisionId}::uuid,
           ${expiredStateDigest},
           ${browserBindingDigest},
+          'SIGN_IN',
           'encrypted-verifier',
           clock_timestamp() - interval '1 second',
           clock_timestamp() - interval '2 minutes',
@@ -108,6 +111,7 @@ describe("authentication proof database boundaries", () => {
           "provider_revision_id",
           "state_digest",
           "browser_binding_digest",
+          "purpose",
           "code_verifier_ciphertext",
           "expires_at",
           "created_at",
@@ -117,6 +121,7 @@ describe("authentication proof database boundaries", () => {
           ${providerRevisionId}::uuid,
           ${boundaryStateDigest},
           ${browserBindingDigest},
+          'SIGN_IN',
           'encrypted-verifier',
           clock_timestamp(),
           clock_timestamp() - interval '2 minutes',
@@ -145,18 +150,23 @@ describe("authentication proof database boundaries", () => {
     ).resolves.toEqual([{ consumedAt: null }, { consumedAt: null }])
   })
 
-  it("adds only the authorization-attempt proof table", async () => {
+  it("keeps the known identity, admission, and session tables bounded", async () => {
     const tables = await prisma.$queryRaw<Array<{ table_name: string }>>`
       SELECT table_name
       FROM information_schema.tables
       WHERE table_schema = 'public'
         AND table_name NOT IN (
           '_prisma_migrations',
+          'authentication_rate_limits',
           'authentication_provider_revisions',
           'authentication_providers',
           'authorization_attempts',
           'external_identities',
+          'hub_sessions',
+          'membership_assignments',
+          'memberships',
           'security_audits',
+          'session_revocation_states',
           'users'
         )
     `

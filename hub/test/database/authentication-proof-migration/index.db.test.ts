@@ -8,7 +8,7 @@ import pg from "pg"
 import { describe, expect, it } from "vitest"
 
 describe("authentication proof migration", () => {
-  it("upgrades the exact C1 schema before deploying C2", async () => {
+  it("upgrades the exact C2 schema before deploying Hub admission and sessions", async () => {
     const adminUrl = process.env.TEST_DATABASE_URL
     if (!adminUrl) throw new Error("TEST_DATABASE_URL is required.")
     const name = `replica_upgrade_${randomBytes(8).toString("hex")}`
@@ -22,28 +22,61 @@ describe("authentication proof migration", () => {
       await database.connect()
       try {
         const hubRoot = fileURLToPath(new URL("../../../", import.meta.url))
-        const migrationName = "20261029203000_identity_foundation"
-        const migrationPath = join(hubRoot, "schema/migrations", migrationName, "migration.sql")
-        await database.query(await readFile(migrationPath, "utf8"))
+        const c1MigrationName = "20261029203000_identity_foundation"
+        const c2MigrationName = "20261030170000_authentication_proof"
+        for (const migrationName of [c1MigrationName, c2MigrationName]) {
+          const migrationPath = join(hubRoot, "schema/migrations", migrationName, "migration.sql")
+          await database.query(await readFile(migrationPath, "utf8"))
+        }
+
+        const providerId = "00000000-0000-4000-8000-000000000010"
+        const revisionId = "00000000-0000-4000-8000-000000000011"
+        await database.query("BEGIN")
+        await database.query(
+          `INSERT INTO authentication_providers (id, key) VALUES ($1, 'github')`,
+          [providerId],
+        )
+        await database.query(
+          `INSERT INTO authentication_provider_revisions
+             (id, provider_id, revision, configuration_digest)
+           VALUES ($1, $2, 1, $3)`,
+          [revisionId, providerId, "a".repeat(64)],
+        )
+        await database.query(
+          `UPDATE authentication_providers SET selected_revision_id = $1 WHERE id = $2`,
+          [revisionId, providerId],
+        )
+        await database.query("COMMIT")
+        const existingAttemptId = "00000000-0000-4000-8000-000000000013"
+        await database.query(
+          `INSERT INTO authorization_attempts
+             (id, provider_revision_id, state_digest, browser_binding_digest,
+              code_verifier_ciphertext, expires_at)
+           VALUES ($1, $2, $3, $4, 'encrypted', CURRENT_TIMESTAMP + interval '1 minute')`,
+          [existingAttemptId, revisionId, "c".repeat(64), "d".repeat(64)],
+        )
+
         const prisma = join(hubRoot, "node_modules/prisma/build/index.js")
         const options = {
           cwd: hubRoot,
           env: { ...process.env, DATABASE_URL: databaseUrl.toString() },
           timeout: 60_000,
         }
-        await promisify(execFile)(
-          process.execPath,
-          [
-            prisma,
-            "migrate",
-            "resolve",
-            "--applied",
-            migrationName,
-            "--config",
-            join(hubRoot, "prisma7.config.ts"),
-          ],
-          options,
-        )
+        for (const migrationName of [c1MigrationName, c2MigrationName]) {
+          await promisify(execFile)(
+            process.execPath,
+            [
+              prisma,
+              "migrate",
+              "resolve",
+              "--applied",
+              migrationName,
+              "--config",
+              join(hubRoot, "prisma7.config.ts"),
+            ],
+            options,
+          )
+        }
         await promisify(execFile)(
           process.execPath,
           [prisma, "migrate", "deploy", "--config", join(hubRoot, "prisma7.config.ts")],
@@ -56,6 +89,7 @@ describe("authentication proof migration", () => {
         expect(migrations.rows).toEqual([
           { migration_name: "20261029203000_identity_foundation" },
           { migration_name: "20261030170000_authentication_proof" },
+          { migration_name: "20261102130000_hub_admission_sessions" },
         ])
         const c2Tables = await database.query<{ table_name: string }>(
           `SELECT table_name
@@ -82,42 +116,31 @@ describe("authentication proof migration", () => {
           "consumed_at",
           "created_at",
           "updated_at",
+          "purpose",
         ])
-
-        const providerId = "00000000-0000-4000-8000-000000000010"
-        const revisionId = "00000000-0000-4000-8000-000000000011"
-        await database.query("BEGIN")
-        await database.query(
-          `INSERT INTO authentication_providers (id, key) VALUES ($1, 'github')`,
-          [providerId],
-        )
-        await database.query(
-          `INSERT INTO authentication_provider_revisions
-             (id, provider_id, revision, configuration_digest)
-           VALUES ($1, $2, 1, $3)`,
-          [revisionId, providerId, "a".repeat(64)],
-        )
-        await database.query(
-          `UPDATE authentication_providers SET selected_revision_id = $1 WHERE id = $2`,
-          [revisionId, providerId],
-        )
-        await database.query("COMMIT")
+        await expect(
+          database.query(`SELECT purpose::text FROM authorization_attempts WHERE id = $1`, [
+            existingAttemptId,
+          ]),
+        ).resolves.toMatchObject({ rows: [{ purpose: "SIGN_IN" }] })
 
         const attemptId = "00000000-0000-4000-8000-000000000014"
         await expect(
           database.query(
             `INSERT INTO authorization_attempts
                (id, provider_revision_id, state_digest, browser_binding_digest,
-                code_verifier_ciphertext, expires_at)
-             VALUES ($1, $2, 'bad', $3, 'encrypted', CURRENT_TIMESTAMP + interval '1 minute')`,
+                purpose, code_verifier_ciphertext, expires_at)
+             VALUES ($1, $2, 'bad', $3, 'SIGN_IN', 'encrypted',
+               CURRENT_TIMESTAMP + interval '1 minute')`,
             [attemptId, revisionId, "b".repeat(64)],
           ),
         ).rejects.toThrow()
         await database.query(
           `INSERT INTO authorization_attempts
              (id, provider_revision_id, state_digest, browser_binding_digest,
-              code_verifier_ciphertext, expires_at)
-           VALUES ($1, $2, $3, $4, 'encrypted', CURRENT_TIMESTAMP + interval '1 minute')`,
+              purpose, code_verifier_ciphertext, expires_at)
+           VALUES ($1, $2, $3, $4, 'ADMIN_ENROLLMENT', 'encrypted',
+             CURRENT_TIMESTAMP + interval '1 minute')`,
           [attemptId, revisionId, "a".repeat(64), "b".repeat(64)],
         )
         await expect(
@@ -127,6 +150,11 @@ describe("authentication proof migration", () => {
           `UPDATE authorization_attempts SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1`,
           [attemptId],
         )
+        await expect(
+          database.query(`UPDATE authorization_attempts SET purpose = 'SIGN_IN' WHERE id = $1`, [
+            attemptId,
+          ]),
+        ).rejects.toThrow("immutable")
         await expect(
           database.query(
             `UPDATE authorization_attempts SET consumed_at = CURRENT_TIMESTAMP WHERE id = $1`,

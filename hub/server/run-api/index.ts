@@ -2,16 +2,21 @@ import { createServer } from "node:http"
 import type { Logger } from "pino"
 
 import { createApp } from "../create-app/index.ts"
+import type { AuthenticationRouteRuntime } from "../routes/api/authentication/types.ts"
 import { attachRealtimeServer } from "../integrations/ws/attach-realtime-server/index.ts"
 import { shutdownServer } from "../shutdown-server/index.ts"
 
 export async function runApi({
   port,
   logger,
+  authentication,
+  trustedProxyHops = 0,
   shutdownTimeoutMs = 30_000,
 }: {
   port: number
   logger: Logger
+  authentication?: AuthenticationRouteRuntime
+  trustedProxyHops?: number
   shutdownTimeoutMs?: number
 }) {
   if (!Number.isInteger(port) || port < 0 || port > 65535) {
@@ -27,6 +32,8 @@ export async function runApi({
     createApp({
       logger,
       broadcast: realtime.broadcast,
+      authentication,
+      trustedProxyHops,
     }),
   )
   let finishBinding!: () => void
