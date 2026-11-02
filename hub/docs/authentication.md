@@ -24,11 +24,15 @@ A successful enrollment creates or restores an active administrator assignment o
 
 Membership lifecycle and assignment provenance are separate. The schema supports active, suspended, and removed memberships. This version stores only bootstrap-owned administrator assignments; provider-owned assignment synchronization and member roles remain deferred.
 
+Membership ownership and creation history are immutable. Bootstrap enrollment writes a separate membership-created or membership-restored audit whenever it changes membership lifecycle; an already active membership creates no duplicate lifecycle audit.
+
 ## Browser session
 
 Hub creates a fresh opaque session value only after admission succeeds. The browser receives the value in an `HttpOnly`, `SameSite=Lax` cookie with a bounded lifetime; HTTPS origins also set `Secure`. The database stores only its SHA-256 digest.
 
 Every current-session restore rereads the global revocation revision, session expiry and termination state, membership lifecycle, and active assignment. A retained cookie stops authorizing access after sign-out, expiry, suspension, removal, assignment revocation, or a global revision change.
+
+The migration owns the single global revocation row. Its identity and history are immutable, its revision can only increment by one, and runtime code never recreates a missing row. Admission and restoration fail closed when that authority is missing. Admissions use shared locks for provider selection and revocation authority so unrelated users can proceed concurrently while authority mutations wait.
 
 `GET /api/auth/session` restores the current session. `POST /api/auth/session/sign-out` ends it and clears the cookie. Hub does not issue refresh tokens, perform provider logout, or support step-up authentication.
 
@@ -37,6 +41,8 @@ Every current-session restore rereads the global revocation revision, session ex
 `POST /api/auth/github/start` begins normal sign-in. `POST /api/auth/github/admin-enrollment/start` verifies the reusable bootstrap secret before beginning administrator enrollment. `GET /api/auth/github/callback` consumes GitHub's callback and redirects with a generic success or denial result.
 
 Start and sign-out requests require the exact configured application origin. Authentication routes use database-backed per-address-digest rate limits, disable response storage, and omit query, form, and cookie payloads from request completion logs. Callback rate limiting runs before callback parsing.
+
+Administrator-enrollment rate limits write at most one durable denial audit for each address-digest window. The first-denial marker, capacity decision, and audit commit atomically; an audit failure rolls them back so a later denial can retry while the response remains `429`.
 
 ## Safety boundaries
 
