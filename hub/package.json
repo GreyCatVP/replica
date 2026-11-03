@@ -32,7 +32,7 @@
     "@rails/actioncable": "8.1.400",
     "@reduxjs/toolkit": "2.13.0",
     "@thoughtbot/superglue": "1.0.3",
-    "react": "19.3.0",
+    "react": "19.3.1",
     "react-dom": "19.3.0",
     "react-redux": "9.3.0",
     "zod": "4.6.6"
