@@ -1,6 +1,6 @@
 # Hub development
 
-Use the Hub devcontainer for Node.js and PostgreSQL, or run Node.js locally with the same database service. Sign-in and production deployment are not configured.
+Use the Hub devcontainer for Node.js and PostgreSQL, or run Node.js locally with the same database service. Sign-in is not configured. See [Deployment](deployment.md) for the production runtime.
 
 ## Devcontainer
 
@@ -36,13 +36,13 @@ In a second terminal, also from `hub/`, start Vite:
 npm run dev
 ```
 
-Open <http://127.0.0.1:5173>. Vite serves the frontend and forwards `/api` requests to Express at <http://127.0.0.1:3001>. `GET /api/health` returns JSON; other API routes have not been built. Both servers accept connections only from this machine. Stop each with Ctrl+C.
+Open <http://127.0.0.1:5173>. Vite serves the frontend and forwards `/api` requests to Express at <http://127.0.0.1:3001>. `GET /api/health` and `GET /api/ready` return JSON; product API routes have not been built. Both servers accept connections only from this machine. Stop each with Ctrl+C.
 
 Vite also forwards WebSocket upgrades under `/api`. The `/api/realtime` endpoint rejects connections until application access checks are connected; see [WebSocket updates](websockets.md). Stopping the API closes its WebSocket connections as well.
 
 The API reads an optional `PORT` environment variable, defaulting to 3001. If you change it, update the local Vite proxy target to match. The editor forwards ports 3001, 5173, and 6006 from the devcontainer. API startup reads `.env` when present; Compose's environment takes precedence.
 
-On `SIGINT` or `SIGTERM`, the API stops accepting requests and allows active requests up to 30 seconds to finish, then flushes [optional telemetry](telemetry.md) within five seconds. No automatic request tracing is installed.
+On `SIGINT` or `SIGTERM`, the API stops accepting requests and allows active requests up to `SHUTDOWN_TIMEOUT_MS` (30000 milliseconds by default) to finish, then flushes [optional telemetry](telemetry.md) within five seconds. No automatic request tracing is installed.
 
 ## Background workers
 
@@ -67,7 +67,7 @@ npm run build
 npm start
 ```
 
-The build produces `dist/client/` and `dist/server/`. `npm start` runs only the compiled API. In a separate terminal, `npm run preview` serves the built frontend for local inspection. Production frontend hosting, API routing, and deployment are not configured.
+The build produces `dist/client/` and `dist/server/`. `npm start` runs only the compiled API by default. In a separate terminal, `npm run preview` serves the built frontend for local inspection. The [production image](deployment.md) serves both on one port and runs both workers.
 
 Use `npm run storybook` to view the existing components and pages at <http://localhost:6006>. They use sample data, not the new API.
 

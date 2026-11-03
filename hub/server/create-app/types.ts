@@ -5,4 +5,6 @@ import type { Broadcast } from "../integrations/ws/types.ts"
 export interface CreateAppOptions {
   logger?: Logger
   broadcast?: Broadcast
+  clientDirectory?: string
+  isReady?: () => Promise<boolean>
 }
